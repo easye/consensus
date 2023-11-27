@@ -1,0 +1,7 @@
+[prototypes/consensus-simulations/src/runner/mod.rs:93] [honest_size, infantile_size, random_size, omniscient_size] = [
+    1000,
+    0,
+    0,
+    0,
+]
+[prototypes/consensus-simulations/src/runner/mod.rs:241] nodes.len() = 1000
