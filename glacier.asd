@@ -5,7 +5,7 @@
                jsown
                split-sequence)
   :components ((:module source
-                :pathname "./"
+                :pathname "./src/"
                 :components ((:file "package")
                              (:file "json-path")
                              (:file "summarize")

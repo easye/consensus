@@ -22,9 +22,9 @@
                 :components ((:mvn "org.apache.parquet/parquet-avro/1.10.0")
                              (:mvn "org.apache.hadoop/hadoop-common/3.1.4")
                              (:mvn "org.apache.hadoop/hadoop-client-api/3.1.4")))
-               (:module package :pathname "./"
+               (:module package :pathname "./src/"
                 :components ((:file "package")))
-               (:module source :pathname "./"
+               (:module source :pathname "./src/"
                 :depends-on (package maven)
                 :components ((:file "parquet")))))
 
