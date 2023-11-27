@@ -1,0 +1,29 @@
+* Requirements
+
+** Consensys prototype runner (Rust)
+
+System currently assumes that the source from
+<https://github.com/status-im/consensus-prototypes> is available
+locally as <file:///~/work/consensus-prototypes>.
+
+Use the following commit:
+
+#+caption: commit
+#+begin_example
+afc235c (HEAD -> main, origin/main, origin/HEAD) Force extensions for output format files (#81)
+#+end_example
+
+A rust toolchain is most comfortably installed via <https://rustup.rs/>
+
+Building the release target will produce a binary located at 
+   <file://~/work/consensus-prototypes/target/release-opt/consensus-simulations"
+
+** gnuplot
+
+In local users PATH
+
+** Common Lisp
+
+Tested under ABCL and SBCL
+
+
