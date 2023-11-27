@@ -14,7 +14,7 @@
     (funcall f file)))
 
 (defun detect-serialization (file)
-  (let ((magic (uiop:run-program `("file" ,(namestring file)) :output :string)))
+  (let ((magic (uiop:run-program `("file" ,(namestring (truename file))) :output :string)))
     (cond
       ((or (search "text" magic)
            (search "JSON" magic))
