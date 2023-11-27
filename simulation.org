@@ -1,0 +1,134 @@
+* Glacier et. al. Simulation
+** Model
+*** sync v. async
+** Implementation
+*** Rust <https://github.com/logos-co/consensus-prototypes/> (Currently Private to Logos)
+* TODO Graphs for @alexanderw
+For given choice of parameters,
+
+|    | Parameter          | Alexander   | RFC 38                          |
+|----+--------------------+-------------+---------------------------------|
+| k  | neighbors in query | 100 (fixed) | 7 (undecided grow to a max 2^4) |
+| l  | look ahead         | ~500        | 19                              |
+| a1 | alpha1             | 4/5         | 4/5                             |
+| a2 | alpha2             | 1/2         | 2/5                             |
+
+retain a vector for all executed rounds contain the following three
+integers per round:
+
+   + nodes in round
+   + nodes finalized to yes
+   + nodes finalized to no
+
+to produce a plot of total yes, no, and undecided per round.
+
+Simulate up to 10^4 nodes adding 10, 100, 1000?
+
+#+caption: run Glacier simulator
+#+begin_src bash
+./target/release-opt/consensus-simulations --input-settings etc/glacier.json --output-file=./var/glauber.output
+#+end_src
+** TODO Grind out parametrized settings with existing code
+
+#+caption: use these on a base template
+| name             | JSON path                                     | Notes |
+|------------------+-----------------------------------------------+-------|
+| a1               | $.consensus_settings.glacier.evidence_alpha   |       |
+| a2               | $.consensus_settings.glacier.evidence_alpha_2 |       |
+| l                | $.consensus_settings.glacier.look_ahead       |       |
+| k                | $.consensus_settings.query.initial_query_size |       |
+| k_query_size     | $.consensus_settings.query.query_size         | ???   |
+| k_multiplier     | $.consensus_settings.query_multiplier         |       |
+| k_multiplier_max | $.consensus_settings.max_multiplier           |       |
+| n                | $.byzantine_settings.total_size               |       |
+| honest           | $.byzantine_settings.honest                   |       |
+| yes              | $.distribution.yes                            |       |
+| no               | $.distribution.no                             |       |
+
+
+
+opinion votes can be derived…
+* TODO Make parameters depend on network size
+* <2022-09-02 Fri> Initial implementation
+** TODO encode/decode parameters in simulation input/output filenames
+All are encoded except for =query-size=.  What is the difference between this and =initial_query_size=?
+*** DONE record random seed used for execution
+CLOSED: [2022-09-05 Mon 06:05]
+- CLOSING NOTE [2022-09-05 Mon 06:05] \\
+  Capture stdin/stdout as files
+Probably should be able to be specified in configuration as otherwise
+it needs to be parsed from =consensus-simulations= stdout.
+** DONE write basic execution pipeline
+CLOSED: [2022-09-04 Sun 08:35]
+- CLOSING NOTE [2022-09-04 Sun 08:35]
+** TODO benchmark
+Along machine, architecture, and async/sync axes
+** DONE setup/run batch jobs
+CLOSED: [2022-09-05 Mon 06:05]
+- CLOSING NOTE [2022-09-05 Mon 06:05] \\
+  Finished with perhaps a little less configurability than I wished.
+*** For @AlexanderM's parameter choices
+*** For RFC 38
+** TODO instrument simulation to emit line data
+** DONE Produce graphs
+CLOSED: [2022-09-04 Sun 08:35]
+- CLOSING NOTE [2022-09-04 Sun 08:35]
+For given parameter choices show YES, NO, NONE opinion evolution over rounds
+
+* Analysis
+** <2022-09-04 Sun>
+
+Ten trials were run for the following parameters:
+
+#+caption: parameters
+| n   |                 10000 | nodes             |
+| l   |                   500 | look ahead        |
+| k   |                   100 | neighbors (fixed) |
+| α1  |                   0.8 |                   |
+| α2  |                   0.5 |                   |
+| yes | 0.49 to 0.51 by 0.001 |                   |
+| no  |               1 - yes |                   |
+
+
+*** Results
+
+The resulting data can be found in <http://glacier.not.org/20220904a/>
+which is organized as follows:
+
+|-------------------------------+---------------------------------------------------------------------------------|
+| parameters for ten trials     | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173.json>      |
+|-------------------------------+---------------------------------------------------------------------------------|
+| Polars output of first trial  | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-1.out>     |
+| stderr of first trial         | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-1.stderr>  |
+| stdout of first trial         | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-1.stderr>  |
+| vote totals per round         | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-1.data>    |
+| gnuplot script for graph      | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-1.gnuplot> |
+|-------------------------------+---------------------------------------------------------------------------------|
+| Polars output of second trial | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-2.out>     |
+| stderr of second trial        | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-2.stderr>  |
+| …                             |                                                                                 |
+|-------------------------------+---------------------------------------------------------------------------------|
+| Polars output of second trial | <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871284173-3.out>     |
+| …                             |                                                                                 |
+
+*** Analysis
+
+All trials appear to converge to an absolute population of =yes= or
+=no= within several rounds.
+
+No trial fails to converge to such an absolute population, except
+those with a exactly bivalent distribution of =yes= and =no= opinions,
+which never appear to converge.
+
+All trials with the same parameter choices have identical node vote
+totals in each round, even though the random seed is different,
+e.g. <http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871287898-1.data>,
+<http://glacier.not.org/20220904a/debian-c-2-4gib-fra1-01-3871287898-2.data>,
+et. al.  This is highly suscipicious.
+
+* Colophon
+#+begin_example
+    @easye <mark.evenson@status.im>
+    Created: 01-SEP-2022
+    Revised: <2022-09-05 Mon 15:03>
+#+end_example

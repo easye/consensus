@@ -1,0 +1,173 @@
+
+* parquet-simple <[[file:~/work/parquet-simple][file:~/work/parquet-simple/]]>
+
+#+begin_example
+Exception in thread "main" java.io.IOException: can not read class
+org.apache.parquet.format.FileMetaData: Required field 'codec' was not
+present! Struct: ColumnMetaData(type:INT32, encodings:[PLAIN, RLE],
+path_in_schema:[0], codec:null, num_values:10000,
+total_uncompressed_size:41283, total_compressed_size:10424,
+data_page_offset:4)
+#+end_example
+
+
+** Under ABCL we fail to configure the filesystem
+
+#+begin_src lisp
+  (let ((i (jnew "org.not.parquet.simple.ParquetSimple")))
+    (values
+           (#"main" i (java:jarray-from-list '("foo")))
+           i))
+#+end_src
+
+#+caption: additional error on Netbeans (but openjdk19)
+#+begin_example
+[repl-thread] WARNING org.apache.hadoop.util.NativeCodeLoader - Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+#+end_example
+
+
+#+begin_src lisp
+  (#"main" 'org.not.parquet.simple.ParquetSimple
+           (jarray-from-list
+            (list (namestring (truename "~/work/consensus-prototypes/xx")))))
+#+end_src
+
+
+#+begin_src lisp
+    (java:add-to-classpath
+     "~/work/parquet-simple/target/parquet-simple-1.0-SNAPSHOT-jar-with-dependencies.jar")
+#+end_src
+
+#+RESULTS:
+| ~/work/parquet-simple/target/parquet-simple-1.0-SNAPSHOT-jar-with-dependencies.jar |
+
+
+#+begin_example
+  org.apache.hadoop.fs.UnsupportedFileSystemException: No FileSystem for scheme \"file\"
+#+end_example
+
+The problems seem to stem from something about the various Hadoop resources failing to load.
+
+<https://hadoop.apache.org/docs/r2.4.1/api/org/apache/hadoop/conf/Configuration.html>
+describes the use of a =core-default.xml= file loaded from the classpath for many common configurations.
+
+#+caption: All resources loaded via explict --classpath
+#+begin_src
+(#"getClassLoader" (jss:find-java-class "org.apache.parquet.hadoop.util.HadoopInputFile"))
+#<jdk.internal.loader.ClassLoaders$AppClassLoader jdk.internal.loader.ClassLoaders.... {70EA1D3E}>
+#+end_src
+
+#+caption: Hadoop loaded via ABCL-ASDF
+#+begin_src 
+(#"getClassLoader" (jss:find-java-class "org.apache.parquet.hadoop.util.HadoopInputFile"))
+#<jdk.internal.loader.ClassLoaders$AppClassLoader jdk.internal.loader.ClassLoaders.... {70EA1D3E}>
+#+end_src
+
+** Try adding all jars to single path
+Doesn't work:  openjdk11 (?) and later just don't implement addURL() in the application classloader
+
+#+caption: Patch to reflectively try for addURL() in any classloader
+#+begin_src patch
+  modified   src/org/armedbear/lisp/JavaClassLoader.java
+@@ -41,6 +41,8 @@ import java.util.Set;
+ import java.io.DataInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.io.File;
++import java.lang.reflect.Method;
+ import java.net.URL;
+ import java.net.URLClassLoader;
+ 
+@@ -305,7 +307,7 @@ public class JavaClassLoader extends URLClassLoader {
+         @Override
+         public LispObject execute(LispObject jarOrJars, LispObject classloader) {
+             Object o = classloader.javaInstance();
+-            if(o instanceof JavaClassLoader) {
++            if (o instanceof JavaClassLoader) {
+                 JavaClassLoader jcl = (JavaClassLoader) o;
+                 if(jarOrJars instanceof Cons) {
+                     while(jarOrJars != NIL) {
+@@ -317,7 +319,23 @@ public class JavaClassLoader extends URLClassLoader {
+                 }
+                 return T;
+             } else {
+-                return error(new TypeError(o + " must be an instance of " + JavaClassLoader.class.getName()));
++              try {
++                // <https://stackoverflow.com/questions/60764/how-to-load-jar-files-dynamically-at-runtime>
++                ClassLoader classLoader = (ClassLoader) o;
++                Method m = classLoader.getClass().getDeclaredMethod("addURL", URL.class);
++                m.setAccessible(true);
++                if (jarOrJars instanceof Cons) {
++                  while(jarOrJars != NIL) {
++                    m.invoke(classLoader, new File(jarOrJars.car().toString()).toURI().toURL());
++                    jarOrJars = jarOrJars.cdr();
++                  }
++                } else {
++                  m.invoke(classLoader, new File(jarOrJars.toString()).toURI().toURL());
++                }
++                return T;
++              } catch (Exception e) {
++                return error(new JavaException(e));
++              }
+             }
+         }
+     };
+@@ -366,7 +384,4 @@ public class JavaClassLoader extends URLClassLoader {
+             return Lisp.class.getClassLoader();
+         }
+     }
+-
+-
+-
+ }
+#+end_src
+
+** Can we find resources?
+
+=/Users/evenson/.m2/repository/org/apache/hadoop/hadoop-common/3.1.4/hadoop-common-3.1.4.jar=
+
+=core-default.xml=
+
+(#"findResource" (get-current-classloader) "core-default.xml")
+
+
+*** Try finagling the findResource() method
+
+Does the default implementation of findResource() not delegate to all
+the URLs added to a URLClassLoader?
+
+
+java -cp /Users/evenson/work/abcl/dist/abcl.jar:/Users/evenson/work/parquet-simple/target/parquet-simple-1.0-SNAPSHOT-jar-with-dependencies.jar org.armedbear.lisp.Main
+
+
+#+caption: working solution
+#+begin_src lisp
+  (let*
+      ((path
+         (java:jnew "org.apache.hadoop.fs.Path" 
+               "file:///Users/evenson/work/consensus-prototypes/xx"))
+       (config
+         (java:jnew "org.apache.hadoop.conf.Configuration")))
+;; guessed at this
+    (#"setClassLoader" config (java:get-current-classloader))
+;; https://stackoverflow.com/questions/17265002/hadoop-no-filesystem-for-scheme-file
+    (#"set" config "fs.file.impl" 
+            "org.apache.hadoop.fs.LocalFileSystem")
+    (#"fromPath" 'HadoopInputFile path config)))
+#+end_src
+
+
+* Parquet compatibility
+
+#+begin_example
+Java exception 'java.io.IOException: can not read class org.apache.parquet.format.FileMetaData: Required field 'codec' was not present! Struct: ColumnMetaData(type:INT32, encodings:[PLAIN, RLE], path_in_schema:[0], codec:null, num_values:10000, total_uncompressed_size:41283, total_compressed_size:16553, data_page_offset:4)'.
+#+end_example
+
+<https://parquetreader.com> can read the files.
+
+** Update to latest Parquet targets
+
+
+* Apache Arrow
+
+<https://arrow.apache.org/docs/developers/java/building.html>
